@@ -1,30 +1,17 @@
 (function() {
   const logoUrl = "https://i.postimg.cc/nVXZRgP5/Ad-Tech-Logo-200x200.jpg";
 
-  /* ---- Global table styles ---- */
+  /* ---- Styles ---- */
   const styleEl = document.createElement('style');
   styleEl.textContent = `
-    .adtech-table {
-      border-collapse: collapse;
-      width: 100%;
-      text-align: left;
-      margin: 6px 0;
-      font-size: 13px;
-    }
-    .adtech-table th, .adtech-table td {
-      border: 1px solid #ccc;
-      padding: 4px 6px;
-      vertical-align: top;
-    }
-    .adtech-table th {
-      background: #f9f9f9;
-      font-weight: bold;
-    }
-    .adtech-h4 { margin: 10px 0 4px; }
+    .adtech-table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 6px 0; }
+    .adtech-table th, .adtech-table td { border: 1px solid #ccc; padding: 4px 6px; vertical-align: top; }
+    .adtech-table th { background: #f9f9f9; font-weight: bold; }
+    .adtech-table button:hover { filter: brightness(0.9); }
   `;
   document.head.appendChild(styleEl);
 
-  /* ---------- Styling & Modal Helpers ---------- */
+  /* ---- Helpers ---- */
   function styleButton(btn) {
     btn.style.background = '#007bff';
     btn.style.color = 'white';
@@ -60,6 +47,7 @@
     return html;
   }
 
+  /* ---- Modal Builder ---- */
   function createModal(title, contentNode, backAction) {
     const modal = document.createElement('div');
     Object.assign(modal.style, {
@@ -67,7 +55,6 @@
       background: 'rgba(0,0,0,0.7)', display: 'flex',
       justifyContent: 'center', alignItems: 'center', zIndex: 10000
     });
-    modal.className = 'adtech-modal';
     const box = document.createElement('div');
     Object.assign(box.style, {
       background: 'white', borderRadius: '8px', width: '950px',
@@ -80,13 +67,34 @@
       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       padding: '10px 15px', background: '#f5f5f5', borderBottom: '1px solid #ddd'
     });
+
     const titleEl = document.createElement('h3');
-    titleEl.style.margin = '0'; titleEl.innerText = title;
+    titleEl.style.margin = '0';
+    titleEl.innerText = title;
+
     const branding = document.createElement('div');
-    branding.style.display = 'flex'; branding.style.alignItems = 'center';
+    branding.style.display = 'flex';
+    branding.style.alignItems = 'center';
     branding.innerHTML = `<img src="${logoUrl}" style="width:20px;height:20px;border-radius:50%;margin-right:5px;">
                            <span style="font-size:12px;color:#666;">powered by AdTech</span>`;
-    header.appendChild(titleEl); header.appendChild(branding);
+    const xBtn = document.createElement('button');
+    xBtn.innerHTML = '✕';
+    Object.assign(xBtn.style, {
+      background: 'transparent',
+      border: 'none',
+      fontSize: '18px',
+      lineHeight: '18px',
+      color: '#666',
+      cursor: 'pointer',
+      marginLeft: '10px'
+    });
+    xBtn.onmouseover = () => xBtn.style.color = '#c00';
+    xBtn.onmouseout = () => xBtn.style.color = '#666';
+    xBtn.onclick = () => modal.remove();
+    branding.appendChild(xBtn);
+
+    header.appendChild(titleEl);
+    header.appendChild(branding);
 
     const contentWrapper = document.createElement('div');
     Object.assign(contentWrapper.style, { padding: '15px', overflowY: 'auto', flex: 1 });
@@ -97,20 +105,24 @@
     if (backAction) {
       const backBtn = document.createElement('button');
       backBtn.innerText = 'Back';
-      styleButton(backBtn); backBtn.style.width = 'auto';
-      backBtn.onclick = () => { document.body.removeChild(modal); backAction(); };
+      styleButton(backBtn);
+      backBtn.style.width = 'auto';
+      backBtn.onclick = () => { modal.remove(); backAction(); };
       footer.appendChild(backBtn);
     }
     const closeBtn = document.createElement('button');
     closeBtn.innerText = 'Close';
-    styleButton(closeBtn); closeBtn.style.width = 'auto';
-    closeBtn.onclick = () => document.body.removeChild(modal);
+    styleButton(closeBtn);
+    closeBtn.style.width = 'auto';
+    closeBtn.onclick = () => modal.remove();
     footer.appendChild(closeBtn);
 
-    box.appendChild(header); box.appendChild(contentWrapper); box.appendChild(footer);
+    box.appendChild(header);
+    box.appendChild(contentWrapper);
+    box.appendChild(footer);
     modal.appendChild(box);
     document.body.appendChild(modal);
-    return modal; // so we can query it later
+    return modal;
   }
 
   /* ---- GPT / Prebid / Tealium Helpers ---- */
@@ -120,9 +132,7 @@
 
   function getGoogleQueryId(slotEl) {
     let queryId = slotEl.getAttribute('data-google-query-id');
-    if (!queryId && slotEl.parentElement) {
-      queryId = slotEl.parentElement.getAttribute('data-google-query-id');
-    }
+    if (!queryId && slotEl.parentElement) queryId = slotEl.parentElement.getAttribute('data-google-query-id');
     if (!queryId) {
       const childWithQueryId = slotEl.querySelector('[data-google-query-id]');
       if (childWithQueryId) queryId = childWithQueryId.getAttribute('data-google-query-id');
@@ -130,9 +140,13 @@
     return queryId || 'Not found';
   }
 
-  /* ---- Added: Prebid data extractor ---- */
   function getPrebidDataDetailed(slotId) {
     if (!window.pbjs || typeof pbjs.getBidResponses !== 'function') return [];
+    const winningIds = typeof pbjs.getAllWinningBids === 'function'
+      ? pbjs.getAllWinningBids().map(w => w.adId)
+      : (typeof pbjs.getWinningBids === 'function'
+          ? pbjs.getWinningBids().map(w => w.adId)
+          : []);
     const bidResponses = pbjs.getBidResponses();
     const slotData = bidResponses[slotId] || { bids: [] };
     return slotData.bids.map(b => ({
@@ -140,7 +154,7 @@
       cpm: b.cpm || '',
       time: b.responseTimestamp ? (b.responseTimestamp - b.requestTimestamp) : '',
       msg: b.statusMessage || '',
-      rendered: !!b.ad,
+      rendered: winningIds.includes(b.adId) && b.status === 'rendered',
       size: b.size || '',
       dealId: b.dealId || '',
       adId: b.adId || '',
@@ -151,31 +165,34 @@
   /* ---- Menu ---- */
   function openMenu(slotEl) {
     const container = document.createElement('div');
-    const items = [
+    [
       ['Run report', () => alert('Report placeholder')],
       ['Show ad details', () => openDetails(slotEl)],
       ['Show Prebid', () => openPrebid(slotEl)],
       ['Show Tealium data', () => openTealium(slotEl)],
       ['Log a ticket', () => alert('Ticket placeholder')]
-    ];
-    items.forEach(([label, fn]) => {
+    ].forEach(([label, action]) => {
       const btn = document.createElement('button');
-      btn.innerText = label; styleButton(btn);
-      btn.onclick = () => { const m = document.querySelector('.adtech-modal'); if (m) document.body.removeChild(m); setTimeout(fn,0); };
+      btn.innerText = label;
+      styleButton(btn);
+      btn.onclick = () => {
+        document.querySelectorAll('.adtech-modal').forEach(m => m.remove());
+        setTimeout(action, 0);  // always has slotEl preserved
+      };
       container.appendChild(btn);
     });
     createModal('Ad Slot Actions', container);
   }
 
-  /* ---- Ad Details (Google Query ID etc) ---- */
+  /* ---- Ad Details modal ---- */
   function openDetails(slotEl) {
     const slotInfo = getSlotInfoByElement(slotEl);
     const googleQueryId = getGoogleQueryId(slotEl);
     const container = document.createElement('div');
 
     let html = `<div style="background:#e3f2fd;padding:10px;border-radius:4px;margin-bottom:15px;border-left:4px solid #2196F3;">
-                 <strong style="color:#1565c0;font-size:13px;">Google Query ID:</strong><br>
-                 <span style="font-size:12px;color:#333;word-break:break-all;">${googleQueryId}</span>`;
+      <strong style="color:#1565c0;font-size:13px;">Google Query ID:</strong><br>
+      <span style="font-size:12px;color:#333;word-break:break-all;">${googleQueryId}</span>`;
     if (googleQueryId !== 'Not found') {
       html += `<br><button id="copyQueryIdBtn" style="margin-top:8px;padding:5px 12px;font-size:11px;background:#2196F3;color:white;border:none;border-radius:3px;cursor:pointer;">Copy Query ID</button>`;
     }
@@ -183,14 +200,13 @@
 
     if (slotInfo) {
       html += `<div style="background:#f5f5f5;padding:10px;border-radius:4px;margin-bottom:10px;">
-                <strong>Ad Unit Path:</strong> ${slotInfo.getAdUnitPath()}<br>
-                <strong>Slot ID:</strong> ${slotInfo.getSlotElementId()}<br>
-                <strong>Sizes:</strong> ${slotInfo.getSizes().map(s => Array.isArray(s) ? s.join('x') : s).join(', ')}
-               </div>`;
+        <strong>Ad Unit Path:</strong> ${slotInfo.getAdUnitPath()}<br>
+        <strong>Slot ID:</strong> ${slotInfo.getSlotElementId()}<br>
+        <strong>Sizes:</strong> ${slotInfo.getSizes().map(s => Array.isArray(s) ? s.join('x') : s).join(', ')}</div>`;
       const targetingKeys = slotInfo.getTargetingKeys();
       if (targetingKeys.length) {
         html += `<div style="background:#fff3e0;padding:10px;border-radius:4px;margin-bottom:10px;border-left:4px solid #FF9800;">
-                  <strong style="color:#e65100;">Targeting:</strong><br>`;
+          <strong style="color:#e65100;">Targeting:</strong><br>`;
         targetingKeys.forEach(key => {
           html += `<span style="color:#666;">${key}:</span> ${slotInfo.getTargeting(key).join(', ')}<br>`;
         });
@@ -199,9 +215,9 @@
       const info = slotInfo.getResponseInformation?.();
       if (info) {
         html += `<div style="background:#e8f5e9;padding:10px;border-radius:4px;margin-bottom:10px;border-left:4px solid #4CAF50;">
-                  <strong style="color:#2e7d32;">Response Info:</strong><br>
-                  <strong>Creative ID:</strong> ${info.creativeId || 'N/A'}<br>
-                  <strong>Line Item ID:</strong> ${info.lineItemId || 'N/A'}`;
+          <strong style="color:#2e7d32;">Response Info:</strong><br>
+          <strong>Creative ID:</strong> ${info.creativeId || 'N/A'}<br>
+          <strong>Line Item ID:</strong> ${info.lineItemId || 'N/A'}`;
         if (info.advertiserId) html += `<br><strong>Advertiser ID:</strong> ${info.advertiserId}`;
         if (info.campaignId) html += `<br><strong>Campaign ID:</strong> ${info.campaignId}`;
         html += `</div>`;
@@ -211,7 +227,7 @@
     }
     container.innerHTML = html;
 
-    const modal = createModal('Ad Slot Details', container);
+    const modal = createModal('Ad Slot Details', container, () => openMenu(slotEl));
     const copyBtn = modal.querySelector('#copyQueryIdBtn');
     if (copyBtn) {
       copyBtn.addEventListener('click', () => {
@@ -249,9 +265,11 @@
         <th>Bidder</th><th>CPM</th><th>Time (ms)</th><th>Status</th>
         <th>Rendered</th><th>Size</th><th>Deal ID</th><th>Ad ID</th><th>Adomain</th></tr>`;
       bids.forEach(b => {
-        html += `<tr><td>${b.bidder}</td><td>${b.cpm}</td><td>${b.time}</td>
-                 <td>${b.msg}</td><td>${b.rendered ? '✅' : ''}</td>
-                 <td>${b.size}</td><td>${b.dealId}</td><td>${b.adId}</td><td>${b.adomain}</td></tr>`;
+        html += `<tr>
+          <td>${b.bidder}</td><td>${b.cpm}</td><td>${b.time}</td>
+          <td>${b.msg}</td><td>${b.rendered ? '✅' : ''}</td>
+          <td>${b.size}</td><td>${b.dealId}</td><td>${b.adId}</td><td>${b.adomain}</td>
+        </tr>`;
       });
       html += '</table>';
       bidsContainer.innerHTML = html;
@@ -262,8 +280,14 @@
       const userIds = pbjs.getUserIds();
       if (userIds && Object.keys(userIds).length) {
         const uidRows = Object.entries(userIds).map(([prov, val]) => {
-          let displayVal = typeof val === 'object' ? JSON.stringify(val) : val;
-          return { Provider: prov, ID: displayVal };
+          const cleanKey = prov.replace(/id$/i, '').replace(/Id$/i, '').toLowerCase() || prov;
+          let displayVal = val;
+          if (val && typeof val === 'object') {
+            if ('id' in val) displayVal = val.id;
+            else if ('value' in val) displayVal = val.value;
+            else displayVal = JSON.stringify(val);
+          }
+          return { [cleanKey]: displayVal };
         });
         uidsContainer.innerHTML = createKVTable(uidRows);
       } else {
@@ -356,13 +380,14 @@
     createModal('Tealium Data', tabs, () => openMenu(slotEl));
   }
 
-  /* ---- Overlay ---- */
+  /* ---- Overlay + scan ---- */
   function createIcon(slotEl) {
     slotEl.style.outline = '5px solid #00FF33';
     slotEl.style.outlineOffset = '5px';
     const icon = document.createElement('img');
     icon.src = logoUrl;
-    icon.style.width = '20px'; icon.style.height = '20px';
+    icon.style.width = '20px';
+    icon.style.height = '20px';
     icon.style.background = 'white';
     icon.style.border = '1px solid #ccc';
     icon.style.borderRadius = '50%';
@@ -370,39 +395,27 @@
     icon.style.cursor = 'pointer';
     icon.style.zIndex = '9999';
     icon.style.position = 'absolute';
+    icon.style.top = '5px';
+    icon.style.right = '5px';
     icon.title = 'Ad slot debug menu';
-    const refButton = slotEl.querySelector(
-      'img[alt*="AdChoices" i], img[alt*="Close" i], .adchoices, .close, svg'
-    );
-    if (refButton) {
-      const slotRect = slotEl.getBoundingClientRect();
-      const refRect = refButton.getBoundingClientRect();
-      icon.style.top = `${refRect.top - slotRect.top}px`;
-      icon.style.right = `${(slotRect.right - refRect.right) + 24}px`;
-    } else {
-      icon.style.top = '5px';
-      icon.style.right = '5px';
-    }
-    icon.addEventListener('click', function(e) {
-      e.stopPropagation();
-      openMenu(slotEl);
-    });
+    icon.addEventListener('click', e => { e.stopPropagation(); openMenu(slotEl); });
     slotEl.style.position = 'relative';
     slotEl.appendChild(icon);
   }
 
   function scanSlots() {
-    const selectors = 'div[id^="gpt-ad"], div[data-google-query-id], div[id*="ad-container"], div[data-testid="advertisement"]';
-    document.querySelectorAll(selectors).forEach(slotEl => {
+    const selectors = 'div[id^="gpt-ad"], div[data-google-query-id], div[id*="ad-container"], div[data-testid="advertisement"], div[class*="ad-slot"], div[class*="banner-ad"]';
+    const matches = document.querySelectorAll(selectors);
+    console.log('[AdInspector] Found ad slots:', matches.length);
+    matches.forEach(slotEl => {
       if (!slotEl.dataset.overlayInjected) {
         createIcon(slotEl);
         slotEl.dataset.overlayInjected = 'true';
       }
     });
   }
+
   scanSlots();
+  setInterval(scanSlots, 3000);
   new MutationObserver(scanSlots).observe(document.body, { childList: true, subtree: true });
-  if (window.googletag && googletag.pubads) {
-    googletag.pubads().addEventListener('slotRenderEnded', scanSlots);
-  }
 })();
